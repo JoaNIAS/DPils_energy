@@ -21,7 +21,6 @@ packaging==24.1
 pandas==2.2.2
 plotly==5.24.1
 pycparser==2.22
-pypiwin32==223
 PySocks==1.7.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1

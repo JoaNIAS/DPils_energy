@@ -69,6 +69,54 @@ def get_nordpool_data():
         print("Ошибка при запросе данных", response.status_code)
         return pd.DataFrame(columns=['Datetime', 'Price [EUR]'])
 
+import pandas as pd
+
+def get_lowest_price_periods(df):
+    if df.empty:
+        return []
+    
+    df['Date'] = df['Datetime'].dt.date  # Создаем колонку 'Date' перед сортировкой
+    df = df.sort_values(by=['Datetime', 'Date'])  # Сортируем по времени и дате по возрастанию
+    df['Hour'] = df['Datetime'].dt.hour
+    lowest_periods = []
+    
+    for date, group in df.groupby('Date'):
+        # Исключаем периоды с 00:00 до 04:00
+        filtered_group = group[group['Hour'] >= 4]
+        
+        if filtered_group.empty:
+            continue
+        
+        max_price = filtered_group['Price [EUR]'].max()
+        price_threshold = max_price * 0.7  # Устанавливаем пороговое значение
+        
+        sorted_group = filtered_group.sort_values(by='Price [EUR]')
+        selected_periods = []
+        
+        for _, row in sorted_group.iterrows():
+            stop_time = row['Datetime'] + pd.Timedelta(hours=1)
+            stop_row = sorted_group[sorted_group['Datetime'] == stop_time]
+            
+            if not stop_row.empty:
+                stop_price = stop_row.iloc[0]['Price [EUR]']
+                
+                if row['Price [EUR]'] < price_threshold and stop_price < price_threshold:
+                    if not selected_periods or all(abs((row['Datetime'] - p['start']).total_seconds()) >= 14400 for p in selected_periods):
+                        if stop_price <= row['Price [EUR]'] * 1.2:  # Оба периода должны иметь низкие цены
+                            selected_periods.append({
+                                'start': row['Datetime'],
+                                'stop': stop_time
+                            })
+                
+            if len(selected_periods) == 3:
+                break
+        
+        lowest_periods.extend(selected_periods)
+    
+    return [{'start': p['start'].strftime('%H:%M %d %b'), 'stop': p['stop'].strftime('%H:%M %d %b')} for p in lowest_periods]
+
+
+
 # Функция для создания графика
 def create_plot(df):
     fig = go.Figure()
@@ -118,6 +166,7 @@ def show_table():
     table_html = df.to_html(classes='table table-striped table-bordered', index=False)
 
     dates = df['Datetime'].dt.strftime('%d %b %H:%M').unique() if not df.empty else []
+    get_lowest_price_periods
 
     graph_html = create_plot(df)
 
@@ -241,6 +290,17 @@ def show_table():
                     <h3>Selected Heating Periods:</h3>
                     <ul id="period-list"></ul>
                 </div>
+                
+                <div class="lowest-periods">
+                    <h3>Recommended Low Price Periods:</h3>
+                    <ul id="lowest-period-list">
+                        {% for period in lowest_price_periods %}
+                            <li class="low-price-period">
+                                Start: {{ period.start }}, Stop: {{ period.stop }}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
             </div>
 
             <div class="mb-3">
@@ -258,7 +318,7 @@ def show_table():
             </div>
         </body>
         </html>
-    """, table=table_html, graph=graph_html, last_updated=last_updated, dates=dates)
+    """, table=table_html, graph=graph_html, last_updated=last_updated, dates=dates, lowest_price_periods=get_lowest_price_periods(df))
 
 # Маршрут для обновления таблицы через AJAX
 @app.route('/update_table', methods=['GET'])
@@ -274,3 +334,4 @@ def update_table():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+

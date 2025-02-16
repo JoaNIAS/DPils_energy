@@ -82,7 +82,7 @@ def get_lowest_price_periods(df):
     
     for date, group in df.groupby('Date'):
         # Исключаем периоды с 00:00 до 04:00
-        filtered_group = group[group['Hour'] >= 4]
+        filtered_group = group[group['Hour'] >= 5]
         
         if filtered_group.empty:
             continue
